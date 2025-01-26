@@ -8,16 +8,13 @@ from numpy import random as npr
 from operator import attrgetter
 from timeit import default_timer as timer
 
-import matplotlib.pyplot as plt
-import networkx as nx
-
 inf = 2100000000
 
 # HMA
 alpha = 0.6
 
 # ACOPR
-Iter = 1500  # number of iterations
+Iter = 1500 # number of iterations
 beta = 0.8  # used in the state transition rule
 rho = 0.1   # used in pheromone calculation
 q_0 = 0.9   # used in the state transition rule
@@ -83,9 +80,9 @@ class Instance:
         self.task_num = 0
         self.total_arc_num = 0
         
-        self.virtual_task_ids = list()      # for every route it contains its current virtual task id
+        self.virtual_task_ids = list()  # for every route plan it contains its current virtual task id
         self.not_allowed_vt_ids = set()
-        self.task_ids = None                # tasks that still need to be served
+        self.task_ids = None            # tasks that still need to be served
         self.task_ids_with_inv = None
         
         self.tasks = None
@@ -122,6 +119,7 @@ class Instance:
         return fixed_seq
     
     
+    # construct route plan that contains only the the task arcs
     def construct_routing_plan(self, seq):
         routing_plan = list()
         for i in range(len(seq)):
@@ -130,6 +128,7 @@ class Instance:
         return routing_plan      
 
     
+    # construct route plan that includes the non task arcs, too
     def construct_whole_routing_plan(self, seq):
         routing_plan = list()
         for i in range(len(seq)-1):
@@ -148,7 +147,7 @@ class Instance:
                 if task != None and task.head_node == head_node and task.tail_node == tail_node), -1)
     
 
-    # find the route segments (i.e., the start and end tasks of each route)
+    # find the route segments (i.e., the start and end tasks of each route plan)
     def find_route_segments(self, s):
         route_seg = []
         i = 0
@@ -162,15 +161,13 @@ class Instance:
         return(route_seg)
     
     
-    # calculate the load of the route segments (if the capacity constraint is broken, return None)
+    # calculate the load of the route segments
     def calculate_route_segments_load(self, s, route_seg):
         route_seg_load = []
         for r in route_seg:
             load = 0
             for i in range(r[0]+1,r[1]):
                 load += self.tasks[s[i]].demand
-#            if load > self.capacity:
-#                return None
             route_seg_load.append(load)
         return(route_seg_load)
     
@@ -210,7 +207,7 @@ class Instance:
         return list(task_ids)
     
 
-    # READ FILE
+    # import CARP instance from file
     def import_from_file(self, file):
         
         f = open(file, "r")
@@ -375,6 +372,8 @@ class Instance:
             self.shortest_path[i][i][0] = 1
             self.shortest_path[i][i][1] = i
             self.min_cost[i][i] = 0
+        
+        return(self.min_cost)
 
     
 # ----------------------------------------- [ Generate Solution ] ------------------------------------------
@@ -421,6 +420,7 @@ class Instance:
                     sequences[i].append(0)
                     current_route_load = 0
                 elif len(servable_task_ids) == 1:
+                    current_route_load += self.tasks[servable_task_ids[0]].demand
                     sequences[i].append(servable_task_ids[0])
                     unserved_task_ids.remove(servable_task_ids[0])
                     if self.tasks[servable_task_ids[0]].inverse != None:
@@ -541,9 +541,8 @@ class Instance:
     def inverse(self, ind, task_id=None):    
         ind_new = copy.deepcopy(ind)
         
-        task_ids = self.get_task_ids_from_sequence(ind.sequence)
-        
-        if task_id == None:            
+        if task_id == None:
+            task_ids = self.get_task_ids_from_sequence(ind.sequence)       
             task_id = random.sample(task_ids, k=1)[0]
         x = ind.sequence.index(task_id)
         
@@ -608,7 +607,7 @@ class Instance:
             return ind
         ind_new1.total_cost = self.calculate_tc(ind_new1.sequence)
         
-        # create another solutions with inverse
+        # create other solutions with inverse
         # before
         ind_new2.sequence = copy.deepcopy(ind_new1.sequence)
         ind_new2.sequence[x_new] = self.tasks[ind_new2.sequence[x_new]].inverse \
@@ -802,7 +801,7 @@ class Instance:
         y = ind.sequence.index(task_id_2)
         y_rid = self.get_route_segment_index(ind.route_seg, y)
         
-        # single route
+        # one route
         if x_rid == y_rid:
             ind_new = copy.deepcopy(ind)
             
@@ -834,7 +833,7 @@ class Instance:
             
             return ind_new
             
-        # double routes
+        # two routes
         else:
             ind_new1 = copy.deepcopy(ind)
             ind_new2 = copy.deepcopy(ind)
@@ -1064,7 +1063,9 @@ class Instance:
         ind_new.route_seg_load = self.calculate_route_segments_load(ind_new.sequence, ind_new.route_seg)
         ind_new.total_cost = self.calculate_tc(ind_new.sequence)
         ind_new.fitness = self.caculate_fitness(ind_new.total_cost)
-        
+
+        print(ind.total_cost, ind_new.total_cost)
+
         return ind_new
  
 
@@ -1076,9 +1077,6 @@ class Instance:
         for r_id, vt_id in enumerate(self.virtual_task_ids):
             if r_id in self.finished_routes:
                 self.not_allowed_vt_ids.add(vt_id)
-        
-        #print(self.not_allowed_vt_ids)
-        #print(self.tasks)
         
         for vt_id in self.not_allowed_vt_ids:
             self.task_ids.remove(vt_id)
@@ -1331,7 +1329,6 @@ class Instance:
                     seq2.append(task_id)
                 seq2.append(0)
             
-            #print(seq, seq2, exception_v_task_ids)
             return seq, seq2, exception_v_task_ids
         
         return seq
@@ -1489,7 +1486,7 @@ class Instance:
         ind_wo_nr_seq, ind_w_nr_seq, bv_task_ids = new_instance.create_virtual_tasks(ind, log, broken_v_id)
         #print(ind_w_nr_seq, ind_wo_nr_seq, bv_task_ids)
         
-        # new_instance.broken_vehicles.add(broken_v_id)
+#        new_instance.broken_vehicles.add(broken_v_id)
         r_ids = [r_id for r_id, v_id in enumerate(self.route_to_vehicle) if v_id == broken_v_id]
         current_r_id = max(r_ids)
         new_instance.finished_routes.add(current_r_id)
@@ -1510,7 +1507,6 @@ class Instance:
 
 # ------------------------------------------- [ RR1 ] ----------------------------------------------------
 
-    
     def reroute_one_route(self, ind_w_nr_seq, ind_wo_nr_seq, task_ids):
         start_time = timer()
         
@@ -1606,7 +1602,7 @@ class Instance:
         print(str(current_best.total_cost)+"\t"+str(timer()-self.start_time)+"\t0")
         c = 0
         no_improvement = 0
-        while no_improvement < no_improvement_limit and timer()-self.start_time <= 600:
+        while no_improvement < no_improvement_limit and timer()-self.start_time <= inf:
             self.employed_bee_phase(local_search_limit)
             self.onlooker_bee_phase(local_search_limit)
             self.scout_bee_phase(max_solution_age)
@@ -1667,8 +1663,10 @@ class Instance:
                     best_ind.sequence != best_ind_i.sequence:
                     best_ind_i = best_ind
                     best_ind_i.age = 0
-                    if best_ind.total_cost < self.best_solution.total_cost:
-                        print(str(best_ind.total_cost)+"\t"+str(timer()-self.start_time))
+                    """
+                    if best_ind_i.total_cost < self.best_solution.total_cost:
+                        print(str(best_ind_i.total_cost)+"\t"+str(timer()-self.start_time))
+                    """
                 else:
                     best_ind_i.age += 1
             if best_ind_i.sequence == ind.sequence:
@@ -1710,8 +1708,10 @@ class Instance:
                     self.calculate_excess_demand(next_ind_i.route_seg_load)==0:
                     best_ind_i = next_ind_i
                     best_ind_i.age = 0
+                    """
                     if best_ind_i.total_cost < self.best_solution.total_cost:
                         print(str(best_ind_i.total_cost)+"\t"+str(timer()-self.start_time))
+                    """
                 else:
                     best_ind_i.age += 1
             if best_ind_i.sequence == neighbour_inds[i].sequence:
@@ -1751,7 +1751,7 @@ class Instance:
     # w: the number of non-improving attractors visited
     def hma(self, psize=10, r=[0.003, 0.004, 0.005, 0.006], w=5):
         self.start_time = timer()
-        self.time_limit = 600
+        self.time_limit = inf
         # population initialization
         self.hma_initialize_population(psize)
         # record best solution so far
@@ -1762,7 +1762,7 @@ class Instance:
         cnt = list(np.ones(len(r), dtype=int))
         # main search procedure
         x = 0
-        while x<1 and timer()-self.start_time <= self.time_limit:
+        while x<10 and timer()-self.start_time <= self.time_limit:
             #print(str(x)+". iteration")
             # randomly select 2 solutions
             ind1, ind2 = random.sample(self.population, 2)
@@ -1896,8 +1896,8 @@ class Instance:
             ind0_seq.append(0)
         
         # sort the unserved tasks in random order
-        duplicate_tasks = list(duplicate_tasks) 
-        random.shuffle(duplicate_tasks)
+        unserved_tasks = list(unserved_tasks) 
+        random.shuffle(unserved_tasks)
         
         #print(ind0_seq)
         
@@ -1989,9 +1989,10 @@ class Instance:
                                     best_feasible_move_ind = new_ind
                                     if new_ind.total_cost < ind_global_best.total_cost:
                                         ind_global_best = new_ind
-                                        # temp
+                                        """
                                         if ind_global_best.total_cost < self.best_solution.total_cost and timer()-self.start_time <= self.time_limit:
                                             print(str(ind_global_best.total_cost)+"\t"+str(timer()-self.start_time)+"\t0")
+                                        """
                                         break
                             ind_curr = best_feasible_move_ind
                         else:
@@ -2000,9 +2001,10 @@ class Instance:
                                 ind_curr = new_ind
                                 if new_ind.total_cost < ind_global_best.total_cost:
                                     ind_global_best = new_ind
-                                    # temporaly added
+                                    """
                                     if ind_global_best.total_cost < self.best_solution.total_cost and timer()-self.start_time <= self.time_limit:
                                         print(str(ind_global_best.total_cost)+"\t"+str(timer()-self.start_time)+"\t0")
+                                    """
             
             #print(ind_global_best.sequence, ind_global_best.route_seg_load, ind_global_best.total_cost)
             
@@ -2026,9 +2028,10 @@ class Instance:
                                     ind_global_best = new_ind
                                     ind_curr = new_ind
                                     improvement = True
-                                    # temp
+                                    """
                                     if new_ind.total_cost < self.best_solution.total_cost and timer()-self.start_time <= self.time_limit:
                                         print(str(new_ind.total_cost)+"\t"+str(timer()-self.start_time)+"\t0")
+                                    """
                                     break
                         else:
                             new_ind = operator(ind_curr, task_id)
@@ -2036,9 +2039,10 @@ class Instance:
                                 ind_global_best = new_ind
                                 ind_curr = new_ind
                                 improvement = True
-                                # temp
+                                """
                                 if new_ind.total_cost < self.best_solution.total_cost and timer()-self.start_time <= self.time_limit:
                                     print(str(new_ind.total_cost)+"\t"+str(timer()-self.start_time)+"\t0")
+                                """
             
             #print(ind_global_best.sequence, ind_global_best.route_seg_load, ind_global_best.total_cost)
             
@@ -2054,14 +2058,12 @@ class Instance:
     def manage_penalty_parameter(self, penalty_parameter, feas_count, infeas_count, excess_dem):
         # infeasible solution
         if excess_dem != 0:
-            feas_count += 1
-            if infeas_count > 0:
-                infeas_count = 0
+            infeas_count += 1
+            feas_count = 0
         # feasible solution
         else:
-            infeas_count += 1
-            if feas_count > 0:
-                feas_count = 0
+            feas_count += 1
+            infeas_count = 0
         # halve the penalty parameter
         if feas_count == 5:
             penalty_parameter = penalty_parameter / 2
@@ -2237,7 +2239,7 @@ class Instance:
                 if i != j:
                     AD_pop[i] += self.hamming_distance(self.population[i], \
                                                       self.population[j])
-            AD_pop[i] = AD_pop[i] / new_population_size - 1
+            AD_pop[i] = AD_pop[i] / (new_population_size - 1)
         
         f_pop = [ind.total_cost for ind in self.population]
         
@@ -2260,7 +2262,6 @@ class Instance:
     
 
 # ------------------------------------------ [ ACOPR ] -------------------------------------------------------
-
 
     # ACOPR main algorithm
     def acopr(self):
